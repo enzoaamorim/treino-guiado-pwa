@@ -62,7 +62,6 @@ O projeto foi desenvolvido com foco em uso mobile, podendo ser acessado pelo nav
 - Interface responsiva com foco em celular
 - Instalação como PWA
 
->>>>>>> 0c28f58 (Atualiza README com prints do projeto)
 ---
 
 ## 🛠️ Tecnologias utilizadas
@@ -73,8 +72,3 @@ O projeto foi desenvolvido com foco em uso mobile, podendo ser acessado pelo nav
 - Supabase
 - CSS
 - PWA
-<<<<<<< HEAD
-- Vercel
-=======
-- Vercel
->>>>>>> 0c28f58 (Atualiza README com prints do projeto)
