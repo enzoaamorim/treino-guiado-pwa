@@ -16,37 +16,40 @@ O projeto foi desenvolvido com foco em uso mobile, podendo ser acessado pelo nav
 
 <table>
   <tr>
-    <td align="center">
+    <td align="center" width="25%">
       <strong>Login</strong><br />
-      <img src="./docs/screenshots/login.jpg" width="180" alt="Tela de login" />
+      <img src="./docs/screenshots/login.jpg" width="140" alt="Tela de login" />
     </td>
-    <td align="center">
+    <td align="center" width="25%">
       <strong>Dashboard</strong><br />
-      <img src="./docs/screenshots/dashboard.jpg" width="180" alt="Dashboard" />
+      <img src="./docs/screenshots/dashboard.jpg" width="140" alt="Dashboard" />
     </td>
-    <td align="center">
+    <td align="center" width="25%">
       <strong>Exercícios</strong><br />
-      <img src="./docs/screenshots/exercicios.jpg" width="180" alt="Tela de exercícios" />
+      <img src="./docs/screenshots/exercicios.jpg" width="140" alt="Tela de exercícios" />
     </td>
-  </tr>
-  <tr>
-    <td align="center">
+    <td align="center" width="25%">
       <strong>Criar treino</strong><br />
-      <img src="./docs/screenshots/criar_treino.jpg" width="180" alt="Tela de criação de treino" />
-    </td>
-    <td align="center">
-      <strong>Treino em andamento</strong><br />
-      <img src="./docs/screenshots/treinos.jpg" width="180" alt="Treino em andamento" />
-    </td>
-    <td align="center">
-      <strong>Histórico</strong><br />
-      <img src="./docs/screenshots/historico.jpg" width="180" alt="Histórico de treinos" />
+      <img src="./docs/screenshots/criar_treino.jpg" width="140" alt="Tela de criação de treino" />
     </td>
   </tr>
+
   <tr>
-    <td align="center">
+    <td align="center" width="25%">
+      <strong>Treino em andamento</strong><br />
+      <img src="./docs/screenshots/treinos.jpg" width="140" alt="Treino em andamento" />
+    </td>
+    <td align="center" width="25%">
+      <strong>Histórico</strong><br />
+      <img src="./docs/screenshots/historico.jpg" width="140" alt="Histórico de treinos" />
+    </td>
+    <td align="center" width="25%">
       <strong>Perfil</strong><br />
-      <img src="./docs/screenshots/perfil.jpg" width="180" alt="Tela de perfil" />
+      <img src="./docs/screenshots/perfil.jpg" width="140" alt="Tela de perfil" />
+    </td>
+    <td align="center" width="25%">
+      <strong>PWA Instalado</strong><br />
+      <img src="./docs/screenshots/pwa.jpg" width="140" alt="PWA instalado no celular" />
     </td>
   </tr>
 </table>
