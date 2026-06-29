@@ -14,41 +14,34 @@ O projeto foi desenvolvido com foco em uso mobile, podendo ser acessado pelo nav
 
 ## 📱 Preview
 
-<table>
-  <tr>
-    <td align="center" width="25%">
-      <strong>Login</strong><br />
-      <img src="./docs/screenshots/login.jpg" width="160" alt="Tela de login" />
-    </td>
-    <td align="center" width="25%">
-      <strong>Dashboard</strong><br />
-      <img src="./docs/screenshots/dashboard.jpg" width="160" alt="Dashboard" />
-    </td>
-    <td align="center" width="25%">
-      <strong>Exercícios</strong><br />
-      <img src="./docs/screenshots/exercicios.jpg" width="160" alt="Tela de exercícios" />
-    </td>
-    <td align="center" width="25%">
-      <strong>Criar treino</strong><br />
-      <img src="./docs/screenshots/criar_treino.jpg" width="160" alt="Tela de criação de treino" />
-    </td>
-  </tr>
+<p align="center">
+  <img src="./docs/screenshots/dashboard.jpg" width="280" alt="Dashboard do Treino Guiado" />
+</p>
 
-  <tr>
-    <td align="center" width="25%">
-      <strong>Treino em andamento</strong><br />
-      <img src="./docs/screenshots/treinos.jpg" width="160" alt="Treinos" />
-    </td>
-    <td align="center" width="25%">
-      <strong>Histórico</strong><br />
-      <img src="./docs/screenshots/historico.jpg" width="160" alt="Histórico de treinos" />
-    </td>
-    <td align="center" width="25%">
-      <strong>Perfil</strong><br />
-      <img src="./docs/screenshots/perfil.jpg" width="160" alt="Tela de perfil" />
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <strong>Aplicativo PWA mobile para controle de treinos, exercícios, histórico e evolução.</strong>
+</p>
+
+---
+
+<details>
+  <summary><strong>Ver mais telas do projeto</strong></summary>
+
+<br />
+
+<p align="center">
+  <img src="./docs/screenshots/login.jpg" width="180" alt="Tela de login" />
+  <img src="./docs/screenshots/exercicios.jpg" width="180" alt="Tela de exercícios" />
+  <img src="./docs/screenshots/criar_treino.jpg" width="180" alt="Tela de criação de treino" />
+</p>
+
+<p align="center">
+  <img src="./docs/screenshots/treinos.jpg" width="180" alt="Treino em andamento" />
+  <img src="./docs/screenshots/historico.jpg" width="180" alt="Histórico de treinos" />
+  <img src="./docs/screenshots/perfil.jpg" width="180" alt="Tela de perfil" />
+</p>
+
+</details>
 
 ---
 
