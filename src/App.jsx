@@ -25,6 +25,40 @@ const GROUPS = [
   "Panturrilhas",
 ];
 
+
+function showToast(message, type = "info") {
+  if (!message || typeof window === "undefined") return;
+
+  window.dispatchEvent(
+    new CustomEvent("app-toast", {
+      detail: {
+        id: Date.now(),
+        message,
+        type,
+      },
+    })
+  );
+}
+
+function showConfirm({ title, message, confirmText = "Confirmar", cancelText = "Cancelar", variant = "default" }) {
+  if (typeof window === "undefined") return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    window.dispatchEvent(
+      new CustomEvent("app-confirm", {
+        detail: {
+          title,
+          message,
+          confirmText,
+          cancelText,
+          variant,
+          resolve,
+        },
+      })
+    );
+  });
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -121,9 +155,82 @@ export default function App() {
       </main>
 
       {!activeWorkout && <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />}
+
+      <FeedbackCenter />
     </div>
   );
 }
+
+
+function FeedbackCenter() {
+  const [toast, setToast] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+
+  useEffect(() => {
+    let toastTimer;
+
+    function handleToast(event) {
+      setToast(event.detail);
+      window.clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => setToast(null), 3800);
+    }
+
+    function handleConfirm(event) {
+      setConfirmDialog(event.detail);
+    }
+
+    window.addEventListener("app-toast", handleToast);
+    window.addEventListener("app-confirm", handleConfirm);
+
+    return () => {
+      window.clearTimeout(toastTimer);
+      window.removeEventListener("app-toast", handleToast);
+      window.removeEventListener("app-confirm", handleConfirm);
+    };
+  }, []);
+
+  function closeConfirm(result) {
+    if (confirmDialog?.resolve) confirmDialog.resolve(result);
+    setConfirmDialog(null);
+  }
+
+  return (
+    <>
+      {toast && (
+        <div className={`app-toast ${toast.type}`} role="status" onClick={() => setToast(null)}>
+          <span>{toast.type === "success" ? "✓" : toast.type === "error" ? "!" : "i"}</span>
+          <p>{toast.message}</p>
+        </div>
+      )}
+
+      {confirmDialog && (
+        <div className="feedback-backdrop" role="presentation" onClick={() => closeConfirm(false)}>
+          <section className="feedback-dialog" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+            <div className={confirmDialog.variant === "danger" ? "feedback-icon danger" : "feedback-icon"}>
+              {confirmDialog.variant === "danger" ? "!" : "?"}
+            </div>
+
+            <h3>{confirmDialog.title || "Confirmar ação"}</h3>
+            {confirmDialog.message && <p>{confirmDialog.message}</p>}
+
+            <div className="feedback-actions">
+              <button className="outline" onClick={() => closeConfirm(false)}>
+                {confirmDialog.cancelText || "Cancelar"}
+              </button>
+              <button
+                className={confirmDialog.variant === "danger" ? "danger" : "primary"}
+                onClick={() => closeConfirm(true)}
+              >
+                {confirmDialog.confirmText || "Confirmar"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+    </>
+  );
+}
+
 
 function BottomNav({ activeTab, setActiveTab }) {
   return (
@@ -152,45 +259,481 @@ function LoadingScreen({ text }) {
 }
 
 function AuthScreen() {
+  const [mode, setMode] = useState("intro");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [notice, setNotice] = useState(null);
+  const [busy, setBusy] = useState(false);
 
-  async function login() {
-    if (!email || !password) return alert("Preencha e-mail e senha.");
+  function changeMode(nextMode) {
+    setMode(nextMode);
+    setNotice(null);
+    setPassword("");
+    setConfirmPassword("");
+  }
+
+  function showNotice(type, text) {
+    setNotice({ type, text });
+  }
+
+  function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+  }
+
+  function validateLogin() {
+    if (!email.trim()) {
+      showNotice("error", "Digite seu e-mail para continuar.");
+      return false;
+    }
+
+    if (!isValidEmail(email)) {
+      showNotice("error", "Digite um e-mail válido.");
+      return false;
+    }
+
+    if (!password.trim()) {
+      showNotice("error", "Digite sua senha para entrar.");
+      return false;
+    }
+
+    return true;
+  }
+
+  function validateRegister() {
+    if (!name.trim()) {
+      showNotice("error", "Digite seu nome para criar a conta.");
+      return false;
+    }
+
+    if (!email.trim()) {
+      showNotice("error", "Digite seu e-mail para criar a conta.");
+      return false;
+    }
+
+    if (!isValidEmail(email)) {
+      showNotice("error", "Digite um e-mail válido.");
+      return false;
+    }
+
+    if (!password.trim()) {
+      showNotice("error", "Crie uma senha para sua conta.");
+      return false;
+    }
+
+    if (password.length < 6) {
+      showNotice("error", "Use uma senha com pelo menos 6 caracteres.");
+      return false;
+    }
+
+    if (!confirmPassword.trim()) {
+      showNotice("error", "Confirme sua senha para continuar.");
+      return false;
+    }
+
+    if (password !== confirmPassword) {
+      showNotice("error", "As senhas não coincidem. Confira e tente novamente.");
+      return false;
+    }
+
+    return true;
+  }
+
+  function validateResetEmail() {
+    if (!email.trim()) {
+      showNotice("error", "Digite seu e-mail para recuperar a senha.");
+      return false;
+    }
+
+    if (!isValidEmail(email)) {
+      showNotice("error", "Digite um e-mail válido para recuperar a senha.");
+      return false;
+    }
+
+    return true;
+  }
+
+  function getFriendlyAuthError(error) {
+    const message = String(error?.message || "").toLowerCase();
+
+    if (message.includes("invalid login credentials")) {
+      return "E-mail ou senha incorretos.";
+    }
+
+    if (message.includes("email not confirmed")) {
+      return "Confirme seu e-mail antes de entrar.";
+    }
+
+    if (message.includes("user already registered") || message.includes("already registered")) {
+      return "Este e-mail já possui uma conta. Tente entrar.";
+    }
+
+    if (message.includes("password")) {
+      return "A senha informada não atende aos requisitos.";
+    }
+
+    if (message.includes("email")) {
+      return "Confira o e-mail informado e tente novamente.";
+    }
+
+    return "Não foi possível concluir a ação. Tente novamente.";
+  }
+
+  async function login(event) {
+    event.preventDefault();
+
+    if (!validateLogin()) return;
+
+    setBusy(true);
+    setNotice(null);
 
     const { error } = await supabase.auth.signInWithPassword({
       email: email.trim(),
       password,
     });
 
-    if (error) alert(error.message);
+    setBusy(false);
+
+    if (error) {
+      showNotice("error", getFriendlyAuthError(error));
+    }
   }
 
-  async function signUp() {
-    if (!email || !password) return alert("Preencha e-mail e senha.");
+  async function signUp(event) {
+    event.preventDefault();
+
+    if (!validateRegister()) return;
+
+    setBusy(true);
+    setNotice(null);
 
     const { error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
+      options: {
+        data: {
+          name: name.trim(),
+        },
+      },
     });
 
-    if (error) alert(error.message);
-    else alert("Conta criada. Agora tente entrar.");
+    setBusy(false);
+
+    if (error) {
+      showNotice("error", getFriendlyAuthError(error));
+      return;
+    }
+
+    setPassword("");
+    setConfirmPassword("");
+    setMode("login");
+    setNotice({ type: "success", text: "Conta criada. Agora entre com seu e-mail e senha." });
+  }
+
+  async function recoverPassword(event) {
+    event.preventDefault();
+
+    if (!validateResetEmail()) return;
+
+    setBusy(true);
+    setNotice(null);
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: window.location.origin,
+    });
+
+    setBusy(false);
+
+    if (error) {
+      showNotice("error", getFriendlyAuthError(error));
+      return;
+    }
+
+    showNotice("success", "Enviamos um link de recuperação para seu e-mail.");
+  }
+
+  if (mode === "intro") {
+    return (
+      <div className="auth-screen">
+        <section className="auth-card auth-landing">
+          <div className="auth-copy">
+            <p className="auth-kicker">Treino Guiado</p>
+            <h1>Organize seus treinos sem complicação.</h1>
+            <p className="auth-lead">
+              Monte rotinas, registre cargas e acompanhe sua evolução direto pelo celular.
+            </p>
+          </div>
+
+          <div className="auth-visual" aria-hidden="true">
+            <div className="floating-card floating-card-main">
+              <span>Treino de hoje</span>
+              <strong>Peito e tríceps</strong>
+              <div className="floating-progress">
+                <i style={{ width: "72%" }} />
+              </div>
+              <small>4 exercícios planejados</small>
+            </div>
+
+            <div className="floating-card floating-card-small floating-card-top">
+              <span>Semana</span>
+              <strong>3/4</strong>
+              <small>treinos feitos</small>
+            </div>
+
+            <div className="floating-card floating-card-small floating-card-bottom">
+              <span>Evolução</span>
+              <strong>+12%</strong>
+              <small>carga média</small>
+            </div>
+
+            <div className="floating-ring" />
+          </div>
+
+          <div className="auth-benefits compact">
+            <span className="auth-benefit">Treinos personalizados</span>
+            <span className="auth-benefit">Histórico de evolução</span>
+            <span className="auth-benefit">Experiência instalável como PWA</span>
+          </div>
+
+          <div className="auth-actions">
+            <button className="primary" onClick={() => changeMode("login")}>
+              Entrar
+            </button>
+
+            <button className="outline" onClick={() => changeMode("register")}>
+              Criar conta
+            </button>
+          </div>
+        </section>
+      </div>
+    );
+  }
+
+  if (mode === "register") {
+    return (
+      <div className="auth-screen">
+        <section className="auth-card">
+          <button className="auth-back" onClick={() => changeMode("intro")} type="button">
+            Voltar
+          </button>
+
+          <p className="auth-kicker">Criar conta</p>
+          <h1>Comece sua rotina.</h1>
+          <p className="auth-lead">
+            Salve seus treinos, registre seu histórico e acompanhe sua evolução.
+          </p>
+
+          {notice && <NoticeMessage notice={notice} />}
+
+          <form className="auth-form" onSubmit={signUp}>
+            <label>
+              Como podemos te chamar?
+              <input
+                type="text"
+                placeholder="Ex: Enzo"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                autoComplete="name"
+              />
+            </label>
+
+            <label>
+              E-mail
+              <input
+                type="email"
+                placeholder="seuemail@exemplo.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+              />
+            </label>
+
+            <label>
+              Senha
+              <div className="password-field">
+                <input
+                  type={showRegisterPassword ? "text" : "password"}
+                  placeholder="Mínimo de 6 caracteres"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowRegisterPassword((current) => !current)}
+                >
+                  {showRegisterPassword ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
+            </label>
+
+            <label>
+              Confirmar senha
+              <div className="password-field">
+                <input
+                  type={showConfirmPassword ? "text" : "password"}
+                  placeholder="Digite a senha novamente"
+                  value={confirmPassword}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
+                  autoComplete="new-password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowConfirmPassword((current) => !current)}
+                >
+                  {showConfirmPassword ? "Ocultar" : "Mostrar"}
+                </button>
+              </div>
+            </label>
+
+            {confirmPassword && (
+              <p className={password === confirmPassword ? "password-hint success" : "password-hint error"}>
+                {password === confirmPassword ? "As senhas coincidem." : "As senhas ainda não coincidem."}
+              </p>
+            )}
+
+            <button className="primary" disabled={busy} type="submit">
+              {busy ? "Criando..." : "Criar conta"}
+            </button>
+          </form>
+
+          <p className="auth-privacy">
+            Seus dados são usados apenas para salvar sua rotina de treinos e histórico dentro do app.
+          </p>
+
+          <p className="auth-footer">
+            Já tem conta?{" "}
+            <button type="button" onClick={() => changeMode("login")}>
+              Entrar
+            </button>
+          </p>
+        </section>
+      </div>
+    );
+  }
+
+  if (mode === "forgot") {
+    return (
+      <div className="auth-screen">
+        <section className="auth-card">
+          <button className="auth-back" onClick={() => changeMode("login")} type="button">
+            Voltar
+          </button>
+
+          <p className="auth-kicker">Recuperar acesso</p>
+          <h1>Esqueceu sua senha?</h1>
+          <p className="auth-lead">
+            Informe seu e-mail e enviaremos um link para você recuperar o acesso.
+          </p>
+
+          {notice && <NoticeMessage notice={notice} />}
+
+          <form className="auth-form" onSubmit={recoverPassword}>
+            <label>
+              E-mail
+              <input
+                type="email"
+                placeholder="seuemail@exemplo.com"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                autoComplete="email"
+              />
+            </label>
+
+            <button className="primary" disabled={busy} type="submit">
+              {busy ? "Enviando..." : "Enviar link de recuperação"}
+            </button>
+          </form>
+
+          <p className="auth-footer">
+            Lembrou sua senha?{" "}
+            <button type="button" onClick={() => changeMode("login")}>
+              Entrar
+            </button>
+          </p>
+        </section>
+      </div>
+    );
   }
 
   return (
     <div className="auth-screen">
       <section className="auth-card">
-        <p className="eyebrow">PWA Mobile</p>
-        <h1>Treino Guiado</h1>
-        <p className="muted">Controle seus treinos, exercícios com GIF, histórico e evolução direto pelo celular.</p>
+        <button className="auth-back" onClick={() => changeMode("intro")} type="button">
+          Voltar
+        </button>
 
-        <input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} />
-        <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <p className="auth-kicker">Acesso</p>
+        <h1>Bem-vindo de volta.</h1>
+        <p className="auth-lead">
+          Entre para continuar seus treinos e acompanhar sua evolução.
+        </p>
 
-        <button className="primary" onClick={login}>Entrar</button>
-        <button className="outline" onClick={signUp}>Criar conta</button>
+        {notice && <NoticeMessage notice={notice} />}
+
+        <form className="auth-form" onSubmit={login}>
+          <label>
+            E-mail
+            <input
+              type="email"
+              placeholder="seuemail@exemplo.com"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              autoComplete="email"
+            />
+          </label>
+
+          <label>
+            Senha
+            <div className="password-field">
+              <input
+                type={showLoginPassword ? "text" : "password"}
+                placeholder="Sua senha"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowLoginPassword((current) => !current)}
+              >
+                {showLoginPassword ? "Ocultar" : "Mostrar"}
+              </button>
+            </div>
+          </label>
+
+          <button className="forgot-link" type="button" onClick={() => changeMode("forgot")}>
+            Esqueci minha senha
+          </button>
+
+          <button className="primary" disabled={busy} type="submit">
+            {busy ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+
+        <p className="auth-footer">
+          Ainda não tem conta?{" "}
+          <button type="button" onClick={() => changeMode("register")}>
+            Criar conta
+          </button>
+        </p>
       </section>
+    </div>
+  );
+}
+
+function NoticeMessage({ notice }) {
+  return (
+    <div className={notice.type === "success" ? "auth-notice success" : "auth-notice error"}>
+      <span>{notice.type === "success" ? "✓" : "!"}</span>
+      <p>{notice.text}</p>
     </div>
   );
 }
@@ -217,8 +760,10 @@ function DashboardScreen({ session, refresh, goToTab, startWorkout }) {
   const [workouts, setWorkouts] = useState([]);
   const [history, setHistory] = useState([]);
   const [exerciseCount, setExerciseCount] = useState(0);
+  const [profileName, setProfileName] = useState(localStorage.getItem("profile_name") || "");
 
   useEffect(() => {
+    setProfileName(localStorage.getItem("profile_name") || "");
     loadDashboard();
   }, [refresh]);
 
@@ -227,7 +772,7 @@ function DashboardScreen({ session, refresh, goToTab, startWorkout }) {
       fetchWorkouts(session.user.id),
       supabase
         .from("training_history")
-        .select("id, workout_name, completed_at")
+        .select("id, workout_id, workout_name, completed_at")
         .eq("user_id", session.user.id)
         .order("completed_at", { ascending: false }),
       supabase.from("exercises").select("id", { count: "exact", head: true }),
@@ -238,48 +783,75 @@ function DashboardScreen({ session, refresh, goToTab, startWorkout }) {
     setExerciseCount(exerciseResult.count || 0);
   }
 
-  const weekCount = history.filter((item) => {
-    const date = new Date(item.completed_at);
-    const limit = new Date();
-    limit.setDate(limit.getDate() - 7);
-    return date >= limit;
-  }).length;
-
+  const displayName = getDisplayName(profileName, session.user.email);
+  const weekCount = history.filter((item) => isCurrentWeek(item.completed_at)).length;
+  const monthCount = history.filter((item) => isCurrentMonth(item.completed_at)).length;
   const suggested = getTodayWorkout(workouts) || workouts[0];
   const last = history[0];
+  const todayName = getDayName(new Date());
 
   return (
     <div>
-      <SectionHeader title="Dashboard" description="Resumo rápido e treino sugerido para hoje." />
-
-      <section className="hero-card">
+      <section className="dashboard-hero">
         <div>
-          <p className="eyebrow">Resumo da semana</p>
-          <h2>{weekCount} treino(s)</h2>
-          <p className="muted">Último treino: {last?.workout_name || "nenhum ainda"}</p>
+          <p className="eyebrow">Hoje • {capitalize(todayName)}</p>
+          <h2>Olá, {displayName}</h2>
+          <p className="muted">
+            {suggested
+              ? `Seu treino sugerido para hoje é ${suggested.name}.`
+              : "Crie sua primeira rotina para começar a treinar com mais organização."}
+          </p>
         </div>
-        <button className="primary compact" onClick={() => goToTab("workouts")}>Ver treinos</button>
       </section>
 
-      <div className="stats-grid">
+      <section className="card today-card">
+        <div className="today-card-header">
+          <div>
+            <p className="eyebrow">Treino de hoje</p>
+            <h3>{suggested?.name || "Nenhum treino definido"}</h3>
+            <p className="muted">{suggested?.day_label || "Monte um treino e defina um dia da semana."}</p>
+          </div>
+          {suggested && <span className="today-pill">{getWorkoutExerciseCount(suggested)} exercícios</span>}
+        </div>
+
+        {suggested ? (
+          <button className="primary" onClick={() => startWorkout(suggested)}>
+            Iniciar treino
+          </button>
+        ) : (
+          <button className="primary" onClick={() => goToTab("create")}>
+            Criar primeiro treino
+          </button>
+        )}
+      </section>
+
+      <div className="stats-grid dashboard-stats">
+        <StatCard label="Na semana" value={weekCount} />
+        <StatCard label="No mês" value={monthCount} />
         <StatCard label="Treinos" value={workouts.length} />
-        <StatCard label="Exercícios" value={exerciseCount} />
-        <StatCard label="Histórico" value={history.length} />
       </div>
 
+      <WeeklyRoutine workouts={workouts} startWorkout={startWorkout} goToTab={goToTab} />
+
       <section className="card">
-        <p className="eyebrow">Treino sugerido</p>
-        <h3>{suggested?.name || "Crie seu primeiro treino"}</h3>
-        <p className="muted">{suggested?.day_label || "Use a aba Criar para montar sua rotina."}</p>
-        {suggested ? (
-          <button className="primary" onClick={() => startWorkout(suggested)}>Iniciar agora</button>
-        ) : (
-          <button className="primary" onClick={() => goToTab("create")}>Criar treino</button>
-        )}
+        <p className="eyebrow">Última atividade</p>
+        <h3>{last?.workout_name || "Nenhum treino finalizado"}</h3>
+        <p className="muted">
+          {last ? formatDateTime(last.completed_at) : "Finalize um treino para acompanhar seu histórico."}
+        </p>
+        <div className="button-grid">
+          <button className="outline" onClick={() => goToTab("history")}>
+            Ver histórico
+          </button>
+          <button className="outline" onClick={() => goToTab("create")}>
+            Criar treino
+          </button>
+        </div>
       </section>
     </div>
   );
 }
+
 
 function StatCard({ label, value }) {
   return (
@@ -289,6 +861,46 @@ function StatCard({ label, value }) {
     </div>
   );
 }
+
+function WeeklyRoutine({ workouts, startWorkout, goToTab }) {
+  const today = getDayName(new Date());
+
+  return (
+    <section className="card weekly-card">
+      <div className="title-row">
+        <div>
+          <p className="eyebrow">Rotina semanal</p>
+          <h3>Planejamento da semana</h3>
+        </div>
+        <button className="ghost small" onClick={() => goToTab("create")}>
+          Novo
+        </button>
+      </div>
+
+      <div className="weekly-list">
+        {WEEK_DAYS.map((day) => {
+          const workout = getWorkoutForDay(workouts, day);
+          const isToday = day === today;
+
+          return (
+            <button
+              key={day}
+              className={isToday ? "weekly-day active" : "weekly-day"}
+              onClick={() => (workout ? startWorkout(workout) : goToTab("create"))}
+            >
+              <span>{capitalize(day).slice(0, 3)}</span>
+              <div>
+                <strong>{workout?.name || "Livre / descanso"}</strong>
+                <small>{workout ? `${getWorkoutExerciseCount(workout)} exercícios` : "Toque para criar um treino"}</small>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 
 function ExercisesScreen({ session, refresh }) {
   const [exercises, setExercises] = useState([]);
@@ -307,7 +919,7 @@ function ExercisesScreen({ session, refresh }) {
       supabase.from("exercise_favorites").select("exercise_id").eq("user_id", session.user.id),
     ]);
 
-    if (error) return alert(error.message);
+    if (error) return showToast(error.message, "error");
 
     setExercises(data || []);
     setFavorites((favoriteData || []).map((item) => item.exercise_id));
@@ -323,7 +935,7 @@ function ExercisesScreen({ session, refresh }) {
         .eq("user_id", session.user.id)
         .eq("exercise_id", exerciseId);
 
-      if (error) return alert(error.message);
+      if (error) return showToast(error.message, "error");
       setFavorites((current) => current.filter((id) => id !== exerciseId));
     } else {
       const { error } = await supabase.from("exercise_favorites").insert({
@@ -331,7 +943,7 @@ function ExercisesScreen({ session, refresh }) {
         exercise_id: exerciseId,
       });
 
-      if (error) return alert(error.message);
+      if (error) return showToast(error.message, "error");
       setFavorites((current) => [...current, exerciseId]);
     }
   }
@@ -347,7 +959,7 @@ function ExercisesScreen({ session, refresh }) {
 
   return (
     <div>
-      <SectionHeader title="Exercícios" description="Biblioteca com GIFs, favoritos, busca e filtros." />
+      <SectionHeader title="Exercícios" description="Biblioteca com favoritos, busca e filtros." />
 
       <input className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar exercício..." />
 
@@ -379,14 +991,16 @@ function ExercisesScreen({ session, refresh }) {
 
 function ExerciseCard({ exercise, favorite, onFavorite, onOpen }) {
   return (
-    <article className="card">
+    <article className="card exercise-card">
       <GifImage src={exercise.gif_url} alt={exercise.name} />
       <div className="title-row">
         <div>
           <h3>{exercise.name}</h3>
           <span className="badge">{exercise.muscle_group}</span>
         </div>
-        <button className="icon" onClick={onFavorite}>{favorite ? "⭐" : "☆"}</button>
+        <button className={favorite ? "favorite-btn active" : "favorite-btn"} onClick={onFavorite}>
+          {favorite ? "Salvo" : "Salvar"}
+        </button>
       </div>
       <p className="muted">{exercise.description}</p>
       <button className="outline" onClick={onOpen}>Ver detalhes</button>
@@ -406,7 +1020,9 @@ function ExerciseModal({ exercise, favorite, onFavorite, onClose }) {
             <h2>{exercise.name}</h2>
             <span className="badge">{exercise.muscle_group}</span>
           </div>
-          <button className="icon" onClick={onFavorite}>{favorite ? "⭐" : "☆"}</button>
+          <button className={favorite ? "favorite-btn active" : "favorite-btn"} onClick={onFavorite}>
+            {favorite ? "Salvo" : "Salvar"}
+          </button>
         </div>
         <p className="muted">{exercise.description}</p>
         {instructions && <InfoBox title="Passo a passo" text={instructions} />}
@@ -432,8 +1048,8 @@ function GifImage({ src, alt, large = false }) {
   if (!src || failed) {
     return (
       <div className={large ? "gif-fallback large" : "gif-fallback"}>
-        <span>🎞️</span>
-        <p>GIF indisponível</p>
+        <strong>Imagem indisponível</strong>
+        <p>Adicione um GIF para este exercício.</p>
       </div>
     );
   }
@@ -451,7 +1067,7 @@ function CreateWorkoutScreen({ session, onCreated }) {
 
   useEffect(() => {
     supabase.from("exercises").select("*").order("name", { ascending: true }).then(({ data, error }) => {
-      if (error) alert(error.message);
+      if (error) showToast(error.message, "error");
       setExercises(data || []);
     });
   }, []);
@@ -459,6 +1075,8 @@ function CreateWorkoutScreen({ session, onCreated }) {
   const filtered = useMemo(() => filterExercises(exercises, search, group), [exercises, search, group]);
 
   function addExercise(exercise) {
+    if (selected.some((item) => item.exercise_id === exercise.id)) return;
+
     setSelected((current) => [
       ...current,
       { exercise_id: exercise.id, name: exercise.name, muscle_group: exercise.muscle_group, sets: "3", reps: "10", load_kg: "", rest_seconds: "60" },
@@ -474,8 +1092,8 @@ function CreateWorkoutScreen({ session, onCreated }) {
   }
 
   async function saveWorkout() {
-    if (!name.trim()) return alert("Digite um nome para o treino.");
-    if (selected.length === 0) return alert("Adicione pelo menos um exercício.");
+    if (!name.trim()) return showToast("Digite um nome para o treino.", "error");
+    if (selected.length === 0) return showToast("Adicione pelo menos um exercício.", "error");
 
     const { data: workout, error } = await supabase
       .from("workouts")
@@ -483,7 +1101,7 @@ function CreateWorkoutScreen({ session, onCreated }) {
       .select()
       .single();
 
-    if (error) return alert(error.message);
+    if (error) return showToast(error.message, "error");
 
     const payload = selected.map((item, index) => ({
       workout_id: workout.id,
@@ -496,43 +1114,67 @@ function CreateWorkoutScreen({ session, onCreated }) {
     }));
 
     const { error: itemError } = await supabase.from("workout_exercises").insert(payload);
-    if (itemError) return alert(itemError.message);
+    if (itemError) return showToast(itemError.message, "error");
 
-    alert("Treino salvo.");
+    showToast("Treino salvo.", "success");
     onCreated();
   }
 
   return (
     <div>
-      <SectionHeader title="Criar treino" description="Monte um treino com séries, repetições, carga e descanso." />
+      <SectionHeader title="Criar treino" description="Monte sua rotina em etapas simples." />
 
-      <section className="card">
+      <section className="card creator-step">
+        <p className="eyebrow">Etapa 1</p>
+        <h3>Dados do treino</h3>
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome. Ex: Treino A - Peito" />
         <input value={dayLabel} onChange={(e) => setDayLabel(e.target.value)} placeholder="Dia. Ex: Segunda-feira" />
       </section>
 
-      <h3 className="subheading">Exercícios escolhidos</h3>
-      {selected.length === 0 && <EmptyState title="Nenhum exercício escolhido" description="Adicione exercícios pela biblioteca abaixo." />}
-
-      {selected.map((item, index) => (
-        <EditableWorkoutItem key={`${item.exercise_id}-${index}`} item={item} index={index} updateItem={updateItem} removeItem={removeItem} />
-      ))}
-
-      <button className="primary" onClick={saveWorkout}>Salvar treino</button>
-
-      <h3 className="subheading">Biblioteca</h3>
-      <input className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar exercício..." />
-      <ChipRow options={GROUPS.filter((item) => item !== "Favoritos")} active={group} setActive={setGroup} />
-
-      {filtered.map((exercise) => (
-        <div className="mini-card" key={exercise.id}>
+      <section className="card creator-step">
+        <div className="title-row">
           <div>
-            <strong>{exercise.name}</strong>
-            <p>{exercise.muscle_group}</p>
+            <p className="eyebrow">Etapa 2</p>
+            <h3>Exercícios escolhidos</h3>
           </div>
-          <button className="primary compact" onClick={() => addExercise(exercise)}>Adicionar</button>
+          <span className="today-pill">{selected.length} itens</span>
         </div>
-      ))}
+
+        {selected.length === 0 && <EmptyState title="Nenhum exercício escolhido" description="Adicione exercícios pela biblioteca abaixo." />}
+
+        {selected.map((item, index) => (
+          <EditableWorkoutItem key={`${item.exercise_id}-${index}`} item={item} index={index} updateItem={updateItem} removeItem={removeItem} />
+        ))}
+
+        <button className="primary" onClick={saveWorkout}>Salvar treino</button>
+      </section>
+
+      <section className="card creator-step">
+        <p className="eyebrow">Etapa 3</p>
+        <h3>Biblioteca</h3>
+        <p className="muted">Busque e adicione exercícios ao treino.</p>
+
+        <input className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar exercício..." />
+        <ChipRow options={GROUPS.filter((item) => item !== "Favoritos")} active={group} setActive={setGroup} />
+
+        <div className="library-list">
+          {filtered.map((exercise) => {
+            const alreadySelected = selected.some((item) => item.exercise_id === exercise.id);
+
+            return (
+              <div className="mini-card" key={exercise.id}>
+                <div>
+                  <strong>{exercise.name}</strong>
+                  <p>{exercise.muscle_group}</p>
+                </div>
+                <button className="primary compact" disabled={alreadySelected} onClick={() => addExercise(exercise)}>
+                  {alreadySelected ? "Adicionado" : "Adicionar"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 }
@@ -560,15 +1202,26 @@ function EditableWorkoutItem({ item, index, updateItem, removeItem }) {
 
 function WorkoutsScreen({ session, refresh, startWorkout, onChanged }) {
   const [workouts, setWorkouts] = useState([]);
+  const [history, setHistory] = useState([]);
 
   useEffect(() => {
     loadWorkouts();
   }, [refresh]);
 
   async function loadWorkouts() {
-    const { data, error } = await fetchWorkouts(session.user.id);
-    if (error) return alert(error.message);
-    setWorkouts(data || []);
+    const [workoutResult, historyResult] = await Promise.all([
+      fetchWorkouts(session.user.id),
+      supabase
+        .from("training_history")
+        .select("id, workout_id, workout_name, completed_at")
+        .eq("user_id", session.user.id)
+        .order("completed_at", { ascending: false }),
+    ]);
+
+    if (workoutResult.error) return showToast(workoutResult.error.message, "error");
+
+    setWorkouts(workoutResult.data || []);
+    setHistory(historyResult.data || []);
   }
 
   async function duplicateWorkout(workout) {
@@ -578,7 +1231,7 @@ function WorkoutsScreen({ session, refresh, startWorkout, onChanged }) {
       .select()
       .single();
 
-    if (error) return alert(error.message);
+    if (error) return showToast(error.message, "error");
 
     const payload = (workout.workout_exercises || []).map((item) => ({
       workout_id: newWorkout.id,
@@ -592,22 +1245,30 @@ function WorkoutsScreen({ session, refresh, startWorkout, onChanged }) {
 
     if (payload.length) {
       const { error: itemError } = await supabase.from("workout_exercises").insert(payload);
-      if (itemError) return alert(itemError.message);
+      if (itemError) return showToast(itemError.message, "error");
     }
 
-    alert("Treino duplicado.");
+    showToast("Treino duplicado.", "success");
     onChanged();
     loadWorkouts();
   }
 
   async function deleteWorkout(workout) {
-    if (!confirm(`Excluir o treino "${workout.name}"?`)) return;
+    if (
+      !(await showConfirm({
+        title: "Excluir treino",
+        message: `Excluir o treino "${workout.name}"? Essa ação não poderá ser desfeita.`,
+        confirmText: "Excluir",
+        cancelText: "Cancelar",
+        variant: "danger",
+      }))
+    ) return;
 
     const { error: itemsError } = await supabase.from("workout_exercises").delete().eq("workout_id", workout.id);
-    if (itemsError) return alert(itemsError.message);
+    if (itemsError) return showToast(itemsError.message, "error");
 
     const { error } = await supabase.from("workouts").delete().eq("id", workout.id).eq("user_id", session.user.id);
-    if (error) return alert(error.message);
+    if (error) return showToast(error.message, "error");
 
     onChanged();
     loadWorkouts();
@@ -615,30 +1276,53 @@ function WorkoutsScreen({ session, refresh, startWorkout, onChanged }) {
 
   return (
     <div>
-      <SectionHeader title="Meus treinos" description="Inicie, duplique ou exclua seus treinos." />
+      <SectionHeader title="Meus treinos" description="Inicie, duplique ou exclua suas rotinas." />
       <button className="outline" onClick={loadWorkouts}>Atualizar lista</button>
 
       {workouts.length === 0 && <EmptyState title="Nenhum treino criado" description="Crie seu primeiro treino na aba Criar." />}
 
-      {workouts.map((workout) => (
-        <section className="card" key={workout.id}>
-          <h3>{workout.name}</h3>
-          {workout.day_label && <span className="badge">{workout.day_label}</span>}
+      {workouts.map((workout) => {
+        const items = workout.workout_exercises || [];
+        const lastRun = getLastWorkoutRun(workout, history);
 
-          {(workout.workout_exercises || []).map((item) => (
-            <div className="row-card" key={item.id}>
-              <strong>{item.exercises?.name}</strong>
-              <span>{item.sets} séries • {item.reps} reps • {item.load_kg ?? "-"} kg • {item.rest_seconds}s</span>
+        return (
+          <section className="card workout-card" key={workout.id}>
+            <div className="workout-card-header">
+              <div>
+                <p className="eyebrow">{workout.day_label || "Sem dia definido"}</p>
+                <h3>{workout.name}</h3>
+              </div>
+              <span className="today-pill">{items.length} exercícios</span>
             </div>
-          ))}
 
-          <div className="button-grid">
-            <button className="primary" onClick={() => startWorkout(workout)}>Iniciar</button>
-            <button className="outline" onClick={() => duplicateWorkout(workout)}>Duplicar</button>
-            <button className="danger" onClick={() => deleteWorkout(workout)}>Excluir</button>
-          </div>
-        </section>
-      ))}
+            <div className="workout-meta-grid">
+              <div>
+                <strong>{estimateWorkoutMinutes(workout)} min</strong>
+                <span>estimado</span>
+              </div>
+              <div>
+                <strong>{lastRun ? formatShortDate(lastRun.completed_at) : "-"}</strong>
+                <span>última vez</span>
+              </div>
+            </div>
+
+            {(items || []).slice(0, 4).map((item) => (
+              <div className="row-card compact-row" key={item.id}>
+                <strong>{item.exercises?.name}</strong>
+                <span>{item.sets} séries • {item.reps} reps • {item.load_kg ?? "-"} kg • {item.rest_seconds}s</span>
+              </div>
+            ))}
+
+            {items.length > 4 && <p className="muted">+{items.length - 4} exercício(s) neste treino.</p>}
+
+            <div className="button-grid workout-actions">
+              <button className="primary" onClick={() => startWorkout(workout)}>Iniciar</button>
+              <button className="outline" onClick={() => duplicateWorkout(workout)}>Duplicar</button>
+              <button className="danger" onClick={() => deleteWorkout(workout)}>Excluir</button>
+            </div>
+          </section>
+        );
+      })}
     </div>
   );
 }
@@ -652,6 +1336,7 @@ function ActiveWorkoutScreen({ workout, onCancel, onFinished }) {
 
   const current = items[index];
   const progress = items.length ? Math.round((done.length / items.length) * 100) : 0;
+  const currentPosition = items.length ? Math.min(index + 1, items.length) : 0;
 
   useEffect(() => {
     if (!running || seconds <= 0) return;
@@ -680,7 +1365,7 @@ function ActiveWorkoutScreen({ workout, onCancel, onFinished }) {
 
   async function finishWorkout() {
     const { data: userData, error: userError } = await supabase.auth.getUser();
-    if (userError) return alert(userError.message);
+    if (userError) return showToast(userError.message, "error");
 
     const { data: history, error } = await supabase
       .from("training_history")
@@ -693,7 +1378,7 @@ function ActiveWorkoutScreen({ workout, onCancel, onFinished }) {
       .select()
       .single();
 
-    if (error) return alert(error.message);
+    if (error) return showToast(error.message, "error");
 
     const payload = items.map((item) => ({
       training_history_id: history.id,
@@ -705,20 +1390,20 @@ function ActiveWorkoutScreen({ workout, onCancel, onFinished }) {
 
     if (payload.length) {
       const { error: itemError } = await supabase.from("training_history_items").insert(payload);
-      if (itemError) return alert(itemError.message);
+      if (itemError) return showToast(itemError.message, "error");
     }
 
-    alert("Treino salvo no histórico.");
+    showToast("Treino salvo no histórico.", "success");
     onFinished();
   }
 
   return (
     <div>
-      <section className="hero-card">
+      <section className="hero-card workout-mode-hero">
         <div>
-          <p className="eyebrow">Em andamento</p>
+          <p className="eyebrow">Modo treino</p>
           <h2>{workout.name}</h2>
-          <p className="muted">{progress}% concluído</p>
+          <p className="muted">{done.length} de {items.length} exercício(s) concluído(s)</p>
         </div>
         <button className="ghost" onClick={onCancel}>Fechar</button>
       </section>
@@ -726,11 +1411,32 @@ function ActiveWorkoutScreen({ workout, onCancel, onFinished }) {
       <div className="progress"><span style={{ width: `${progress}%` }} /></div>
 
       {current && (
-        <section className="card">
+        <section className="card workout-focus-card">
+          <div className="workout-focus-top">
+            <p className="eyebrow">Exercício atual</p>
+            <span>{currentPosition}/{items.length}</span>
+          </div>
+
           <GifImage src={current.exercises?.gif_url} alt={current.exercises?.name} />
+
           <h2>{current.exercises?.name}</h2>
-          <p className="muted">{current.sets} séries • {current.reps} reps • {current.load_kg ?? "-"} kg</p>
-          <div className="button-grid">
+
+          <div className="exercise-prescription">
+            <div>
+              <strong>{current.sets}</strong>
+              <span>séries</span>
+            </div>
+            <div>
+              <strong>{current.reps}</strong>
+              <span>reps</span>
+            </div>
+            <div>
+              <strong>{current.load_kg ?? "-"}</strong>
+              <span>kg</span>
+            </div>
+          </div>
+
+          <div className="button-grid three">
             <button className="outline" onClick={() => setIndex((value) => Math.max(0, value - 1))}>Voltar</button>
             <button className="primary" onClick={completeExercise}>Concluir</button>
             <button className="outline" onClick={() => setIndex((value) => Math.min(items.length - 1, value + 1))}>Pular</button>
@@ -738,10 +1444,10 @@ function ActiveWorkoutScreen({ workout, onCancel, onFinished }) {
         </section>
       )}
 
-      <section className="timer-card">
+      <section className="timer-card rest-card">
         <span>Descanso</span>
         <strong>{seconds}s</strong>
-        <div className="button-grid">
+        <div className="button-grid three">
           <button className="outline" onClick={() => setRunning(true)}>Iniciar</button>
           <button className="outline" onClick={() => setRunning(false)}>Pausar</button>
           <button className="outline" onClick={() => setSeconds(current?.rest_seconds || 60)}>Resetar</button>
@@ -749,19 +1455,24 @@ function ActiveWorkoutScreen({ workout, onCancel, onFinished }) {
       </section>
 
       <section className="card">
-        <h3>Checklist</h3>
-        {items.map((item) => (
-          <button
-            key={item.id}
-            className={done.includes(item.id) ? "check done" : "check"}
-            onClick={() => setDone((currentDone) => currentDone.includes(item.id) ? currentDone.filter((id) => id !== item.id) : [...currentDone, item.id])}
-          >
-            {done.includes(item.id) ? "✅" : "⬜"} {item.exercises?.name}
-          </button>
-        ))}
+        <h3>Checklist do treino</h3>
+        {items.map((item) => {
+          const checked = done.includes(item.id);
+
+          return (
+            <button
+              key={item.id}
+              className={checked ? "check done" : "check"}
+              onClick={() => setDone((currentDone) => checked ? currentDone.filter((id) => id !== item.id) : [...currentDone, item.id])}
+            >
+              <span className="check-indicator">{checked ? "✓" : ""}</span>
+              {item.exercises?.name}
+            </button>
+          );
+        })}
       </section>
 
-      <button className="primary" onClick={finishWorkout}>Finalizar e salvar no histórico</button>
+      <button className="primary" onClick={finishWorkout}>Finalizar e salvar</button>
     </div>
   );
 }
@@ -792,38 +1503,68 @@ function HistoryScreen({ session, refresh, onChanged }) {
       .eq("user_id", session.user.id)
       .order("completed_at", { ascending: false });
 
-    if (error) return alert(error.message);
+    if (error) return showToast(error.message, "error");
     setHistory(data || []);
   }
 
   async function deleteHistory(item) {
-    if (!confirm(`Excluir o registro "${item.workout_name}"?`)) return;
+    if (
+      !(await showConfirm({
+        title: "Excluir registro",
+        message: `Excluir o registro "${item.workout_name}"? Essa ação não poderá ser desfeita.`,
+        confirmText: "Excluir",
+        cancelText: "Cancelar",
+        variant: "danger",
+      }))
+    ) return;
 
     const { error: itemsError } = await supabase.from("training_history_items").delete().eq("training_history_id", item.id);
-    if (itemsError) return alert(itemsError.message);
+    if (itemsError) return showToast(itemsError.message, "error");
 
     const { error } = await supabase.from("training_history").delete().eq("id", item.id).eq("user_id", session.user.id);
-    if (error) return alert(error.message);
+    if (error) return showToast(error.message, "error");
 
     onChanged();
     fetchHistory();
   }
 
+  const weekCount = history.filter((item) => isCurrentWeek(item.completed_at)).length;
+  const monthCount = history.filter((item) => isCurrentMonth(item.completed_at)).length;
+  const last = history[0];
+
   return (
     <div>
       <SectionHeader title="Histórico" description="Treinos finalizados e registros de evolução." />
-      <button className="outline" onClick={fetchHistory}>Atualizar histórico</button>
+
+      <div className="stats-grid dashboard-stats">
+        <StatCard label="Semana" value={weekCount} />
+        <StatCard label="Mês" value={monthCount} />
+        <StatCard label="Total" value={history.length} />
+      </div>
+
+      <section className="card">
+        <p className="eyebrow">Resumo recente</p>
+        <h3>{last?.workout_name || "Nenhum treino registrado"}</h3>
+        <p className="muted">{last ? formatDateTime(last.completed_at) : "Finalize um treino para aparecer aqui."}</p>
+        <button className="outline" onClick={fetchHistory}>Atualizar histórico</button>
+      </section>
 
       {history.length === 0 && <EmptyState title="Nenhum treino registrado" description="Finalize um treino para aparecer aqui." />}
 
       {history.map((item) => (
-        <section className="card" key={item.id}>
-          <h3>{item.workout_name}</h3>
-          <p className="muted">{new Date(item.completed_at).toLocaleString("pt-BR")}</p>
+        <section className="card history-card" key={item.id}>
+          <div className="history-header">
+            <div>
+              <p className="eyebrow">{formatShortDate(item.completed_at)}</p>
+              <h3>{item.workout_name}</h3>
+            </div>
+            <span className="today-pill">{(item.training_history_items || []).length} itens</span>
+          </div>
+
           <p className="muted">{item.notes}</p>
 
           {(item.training_history_items || []).map((exercise) => (
-            <div className="row-card" key={exercise.id}>
+            <div className="row-card compact-row" key={exercise.id}>
               <strong>{exercise.exercise_name}</strong>
               <span>{exercise.sets}x{exercise.reps} • {exercise.load_kg ?? "-"} kg</span>
             </div>
@@ -849,7 +1590,7 @@ function ProfileScreen({ session }) {
     localStorage.setItem("profile_level", level);
     localStorage.setItem("profile_weight", weight);
     localStorage.setItem("profile_height", height);
-    alert("Perfil salvo neste dispositivo.");
+    showToast("Perfil salvo neste dispositivo.", "success");
   }
 
   return (
@@ -944,8 +1685,104 @@ async function fetchWorkouts(userId) {
   return result;
 }
 
+const WEEK_DAYS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+
 function getTodayWorkout(workouts) {
-  const today = new Date().getDay();
-  const days = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
-  return workouts.find((workout) => (workout.day_label || "").toLowerCase().includes(days[today]));
+  const today = getDayName(new Date());
+  return getWorkoutForDay(workouts, today);
 }
+
+function getWorkoutForDay(workouts, day) {
+  const normalizedDay = normalizeText(day);
+
+  return workouts.find((workout) => {
+    const label = normalizeText(workout.day_label || "");
+    return label.includes(normalizedDay);
+  });
+}
+
+function getDayName(date) {
+  return WEEK_DAYS[date.getDay()];
+}
+
+function capitalize(text) {
+  if (!text) return "";
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function normalizeText(text) {
+  return String(text || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function getDisplayName(profileName, email) {
+  const savedName = String(profileName || "").trim();
+
+  if (savedName) {
+    return savedName.split(" ")[0];
+  }
+
+  return String(email || "Aluno").split("@")[0].split(".")[0];
+}
+
+function getWorkoutExerciseCount(workout) {
+  return (workout?.workout_exercises || []).length;
+}
+
+function estimateWorkoutMinutes(workout) {
+  const items = workout?.workout_exercises || [];
+
+  if (!items.length) return 0;
+
+  const totalSeconds = items.reduce((sum, item) => {
+    const sets = Number(item.sets) || 1;
+    const rest = Number(item.rest_seconds) || 60;
+    return sum + sets * (rest + 45);
+  }, 0);
+
+  return Math.max(10, Math.round(totalSeconds / 60));
+}
+
+function getLastWorkoutRun(workout, history) {
+  return history.find((item) => item.workout_id === workout.id || item.workout_name === workout.name);
+}
+
+function isCurrentWeek(dateValue) {
+  const date = new Date(dateValue);
+  const now = new Date();
+  const firstDay = new Date(now);
+
+  firstDay.setHours(0, 0, 0, 0);
+  firstDay.setDate(now.getDate() - now.getDay());
+
+  const lastDay = new Date(firstDay);
+  lastDay.setDate(firstDay.getDate() + 7);
+
+  return date >= firstDay && date < lastDay;
+}
+
+function isCurrentMonth(dateValue) {
+  const date = new Date(dateValue);
+  const now = new Date();
+
+  return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+}
+
+function formatShortDate(dateValue) {
+  return new Date(dateValue).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+  });
+}
+
+function formatDateTime(dateValue) {
+  return new Date(dateValue).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
